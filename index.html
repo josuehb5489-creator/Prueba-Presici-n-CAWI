@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Censo Web Georreferenciación</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --bg:#f4f6f8; --card:#ffffff; --text:#1d2733; --muted:#5b6876; --line:#d9e0e7;
+  --accent:#0b5cad; --accent-ink:#ffffff; --ok:#1a7f45; --warn:#a56200; --err:#b3261e;
+  --ok-bg:#e6f4ec; --warn-bg:#fff4e0; --err-bg:#fdecea; --info-bg:#e8f0fb;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11161c; --card:#1a222b; --text:#e6edf3; --muted:#9aa7b4; --line:#2c3743;
+    --accent:#5aa2ec; --accent-ink:#0b1622; --ok:#5fcf8f; --warn:#f0b35a; --err:#f2857c;
+    --ok-bg:#16302a; --warn-bg:#33270f; --err-bg:#3a1c1a; --info-bg:#172a40;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:20px 16px 8px;max-width:960px;margin:auto}
+header h1{margin:0;font-size:1.35rem}
+header p{margin:4px 0 0;color:var(--muted)}
+.tabs{max-width:960px;margin:8px auto 0;padding:0 16px;display:flex;gap:8px}
+.tabs button{background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 14px;cursor:pointer;font:inherit}
+.tabs button.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+main{max-width:960px;margin:auto;padding:12px 16px 40px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:12px 0}
+h2{font-size:1.05rem;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.num{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:.8rem}
+.diag{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chip{font-size:.8rem;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.chip.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+.chip.err{background:var(--err-bg);color:var(--err);border-color:transparent}
+.chip.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+button.pri,button.sec,button.danger{font:inherit;border-radius:8px;padding:9px 16px;cursor:pointer;border:1px solid transparent}
+button.pri{background:var(--accent);color:var(--accent-ink)}
+button.sec{background:transparent;color:var(--accent);border-color:var(--accent)}
+button.danger{background:transparent;color:var(--err);border-color:var(--err)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.status{margin-top:10px;padding:10px 12px;border-radius:8px;display:none;white-space:pre-line}
+.status.info{display:block;background:var(--info-bg)}
+.status.ok{display:block;background:var(--ok-bg);color:var(--ok)}
+.status.warn{display:block;background:var(--warn-bg);color:var(--warn)}
+.status.error{display:block;background:var(--err-bg);color:var(--err)}
+.progress{height:6px;background:var(--line);border-radius:6px;margin-top:10px;overflow:hidden}
+#barra{height:100%;width:0;background:var(--accent);transition:width .2s}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:10px}
+.metric{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.metric b{display:block;font-size:1.1rem}
+.metric span{font-size:.78rem;color:var(--muted)}
+#map,#mapRes{height:340px;border-radius:8px;border:1px solid var(--line)}
+fieldset{border:0;padding:0;margin:0;min-width:0}
+fieldset:disabled{opacity:.55}
+label{display:block;margin:10px 0 4px;font-weight:600;font-size:.9rem}
+label.check,label.radio{font-weight:400;display:flex;gap:8px;align-items:flex-start}
+select,input[type=number],textarea{width:100%;font:inherit;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
+.lock{padding:10px 12px;border-radius:8px;background:var(--warn-bg);color:var(--warn);margin-bottom:6px}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.82rem}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;white-space:nowrap}
+th{color:var(--muted);font-weight:600}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:.8rem;color:var(--muted);margin-top:8px}
+small.muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Censo web (CAWI) · Prueba de georreferenciación</h1>
+  <p>Prototipo para medir la precisión de la ubicación del navegador según el dispositivo.</p>
+</header>
+<nav class="tabs">
+  <button data-tab="encuesta" class="active">Cuestionario</button>
+  <button data-tab="resultados">Resultados</button>
+</nav>
+<main>
+<section id="tab-encuesta">
+  <div class="card">
+    <h2><span class="num">1</span>Ubicación de la vivienda</h2>
+    <p>Para ubicar su vivienda en la cartografía censal necesitamos la posición de este dispositivo. Se usa únicamente con fines estadísticos y está protegida por la confidencialidad estadística.</p>
+    <div id="diag" class="diag"></div>
+    <label class="check"><input type="checkbox" id="consent"> Autorizo el uso de la ubicación de este dispositivo para georreferenciar la vivienda.</label>
+    <div class="row">
+      <button class="pri" id="btnUbicar" disabled>Habilitar ubicación</button>
+      <button class="sec" id="btnSinUbicacion" hidden>Continuar sin ubicación</button>
+    </div>
+    <div id="estado" class="status"></div>
+    <div class="progress"><div id="barra"></div></div>
+    <div class="metrics" id="metricas"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="num">2</span>Confirme el punto de la vivienda</h2>
+    <div id="map"></div>
+    <small class="muted">Círculo azul: radio de precisión reportado por el dispositivo. Marcador: vivienda (puede arrastrarlo o tocar el mapa).</small>
+    <fieldset id="fsConfirma" disabled>
+      <label>¿El punto corresponde a la vivienda que está censando?</label>
+      <label class="radio"><input type="radio" name="confirma" value="si"> Sí, estoy en la vivienda</label>
+      <label class="radio"><input type="radio" name="confirma" value="ajustado"> No, ajusté el punto en el mapa</label>
+      <p id="desplazamiento" class="muted"></p>
+    </fieldset>
+  </div>
+
+  <form class="card" id="formCenso">
+    <h2><span class="num">3</span>Cuestionario (ejemplo)</h2>
+    <fieldset id="fsForm" disabled>
+      <div class="lock" id="lockMsg">🔒 Debe habilitar la ubicación antes de completar el cuestionario.</div>
+      <label for="provincia">Provincia</label>
+      <select id="provincia" required>
+        <option value="">Seleccione…</option>
+        <option>San José</option><option>Alajuela</option><option>Cartago</option>
+        <option>Heredia</option><option>Guanacaste</option><option>Puntarenas</option><option>Limón</option>
+      </select>
+      <label for="tipoViv">Tipo de vivienda</label>
+      <select id="tipoViv" required>
+        <option value="">Seleccione…</option>
+        <option>Casa independiente</option><option>Apartamento</option><option>Casa en condominio</option>
+        <option>Cuarto en cuartería</option><option>Tugurio</option><option>Otro</option>
+      </select>
+      <label for="personas">Personas que residen habitualmente</label>
+      <input type="number" id="personas" min="1" max="40" required>
+      <label for="lugar">¿Desde dónde completa el cuestionario?</label>
+      <select id="lugar" required>
+        <option value="">Seleccione…</option>
+        <option>Dentro de la vivienda</option><option>Cerca de la vivienda</option>
+        <option>Trabajo / estudio</option><option>Otro lugar</option>
+      </select>
+      <label for="obs">Observaciones de la prueba (lugar interior/exterior, Wi-Fi, etc.)</label>
+      <textarea id="obs" rows="2"></textarea>
+      <div class="row"><button class="pri" type="submit">Enviar</button></div>
+    </fieldset>
+  </form>
+
+  <div class="card" id="enviado" hidden>
+    <h2>✅ Registro guardado</h2>
+    <p id="enviadoTxt"></p>
+    <div class="row"><button class="sec" id="btnOtro">Nueva prueba</button></div>
+  </div>
+</section>
+
+<section id="tab-resultados" hidden>
+  <div class="card">
+    <h2>Resumen por tipo de dispositivo</h2>
+    <div class="tablewrap"><table id="resumen"></table></div>
+    <small class="muted">Registros guardados en este navegador. Si configuró el ENDPOINT, el consolidado de todos los dispositivos está en Google Sheets.</small>
+    <div class="row">
+      <button class="sec" id="btnCSV">Descargar CSV</button>
+      <button class="sec" id="btnGeo">Descargar GeoJSON</button>
+      <button class="danger" id="btnBorrar">Borrar registros</button>
+    </div>
+  </div>
+  <div class="card">
+    <div id="mapRes"></div>
+    <div class="legend" id="leyenda"></div>
+  </div>
+  <div class="card"><div class="tablewrap"><table id="tabla"></table></div></div>
+</section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ===================== CONFIGURACIÓN ===================== */
+const CONFIG = {
+  OBLIGATORIO: true,          // true: el cuestionario queda bloqueado hasta obtener ubicación
+  PRECISION_OBJETIVO_M: 10,   // la captura se detiene al alcanzar esta precisión
+  TIEMPO_MAX_S: 30,           // segundos máximos de captura desde la primera lectura
+  ENDPOINT: "https://script.google.com/macros/s/AKfycbzn6CckhR73fgu4JIF-WH24BluOxqP-eKzWzHOqf3miHpEVjCz7SPD1BNOccf4wSylD/exec"                // URL del Web App de Google Apps Script (opcional)
+};
+const CR = {latMin:5.0, latMax:11.5, lonMin:-87.6, lonMax:-82.4}; // incluye Isla del Coco
+const LS_KEY = 'censo_geo_registros_v1';
+const CALIDADES = [
+  {max:10,       nombre:'Muy alta', color:'#1a9850'},
+  {max:30,       nombre:'Alta',     color:'#91cf60'},
+  {max:100,      nombre:'Media',    color:'#e6c229'},
+  {max:1000,     nombre:'Baja',     color:'#fc8d59'},
+  {max:Infinity, nombre:'Muy baja (aproximada)', color:'#d73027'}
+];
+const $ = s => document.querySelector(s);
+
+/* ===================== DISPOSITIVO ===================== */
+function detectarDispositivo(){
+  const ua = navigator.userAgent, touch = navigator.maxTouchPoints || 0;
+  const iPadOS = /Macintosh/.test(ua) && touch > 1;
+  let tipo = 'Escritorio/Portátil';
+  if (/iPad/.test(ua) || iPadOS || (/Android/.test(ua) && !/Mobile/.test(ua)) || /Tablet/i.test(ua)) tipo = 'Tableta';
+  else if (/Mobi|iPhone|iPod/.test(ua) || navigator.userAgentData?.mobile) tipo = 'Móvil';
+  let so = 'Otro';
+  if (/iPhone|iPad|iPod/.test(ua) || iPadOS) so = 'iOS/iPadOS';
+  else if (/Android/.test(ua)) so = 'Android';
+  else if (/Windows/.test(ua)) so = 'Windows';
+  else if (/CrOS/.test(ua)) so = 'ChromeOS';
+  else if (/Mac OS X/.test(ua)) so = 'macOS';
+  else if (/Linux/.test(ua)) so = 'Linux';
+  let nav = 'Otro';
+  if (/Edg\//.test(ua)) nav = 'Edge';
+  else if (/SamsungBrowser/.test(ua)) nav = 'Samsung Internet';
+  else if (/OPR\//.test(ua)) nav = 'Opera';
+  else if (/Firefox|FxiOS/.test(ua)) nav = 'Firefox';
+  else if (/CriOS|Chrome/.test(ua)) nav = 'Chrome';
+  else if (/Safari/.test(ua)) nav = 'Safari';
+  const webview = /FBAN|FBAV|Instagram|WhatsApp|Line\/|; wv\)/.test(ua);
+  return {tipo, so, navegador: nav, webview, tactil: touch > 0,
+          pantalla: `${screen.width}x${screen.height}@${window.devicePixelRatio}`, ua};
+}
+const disp = detectarDispositivo();
+
+/* ===================== DIAGNÓSTICO / PERMISO ===================== */
+let estadoPermiso = 'desconocido';
+function chip(txt, cls){ return `<span class="chip ${cls||''}">${txt}</span>`; }
+function pintarDiag(){
+  const p = {granted:['concedido','ok'], denied:['denegado','err'], prompt:['pendiente','warn']}[estadoPermiso] || [estadoPermiso,''];
+  $('#diag').innerHTML =
+    chip('HTTPS: ' + (window.isSecureContext ? 'sí' : 'no'), window.isSecureContext ? 'ok' : 'err') +
+    chip('API geolocalización: ' + (('geolocation' in navigator) ? 'sí' : 'no'), ('geolocation' in navigator) ? 'ok' : 'err') +
+    chip('Permiso: ' + p[0], p[1]) +
+    chip(`${disp.tipo} · ${disp.so} · ${disp.navegador}`) +
+    (disp.webview ? chip('Navegador integrado (WebView)', 'warn') : '');
+}
+async function consultarPermiso(){
+  try{
+    const s = await navigator.permissions.query({name:'geolocation'});
+    estadoPermiso = s.state;
+    s.onchange = () => { estadoPermiso = s.state; pintarDiag(); };
+  }catch(e){ estadoPermiso = 'no consultable'; }
+  pintarDiag();
+}
+pintarDiag(); consultarPermiso();
+
+/* ===================== MAPA ===================== */
+const map = L.map('map').setView([9.93, -84.08], 8);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+let circulo = null, mGPS = null, mViv = null;
+
+function dibujarLectura(l){
+  const ll = [l.lat, l.lon];
+  if (!circulo){
+    circulo = L.circle(ll, {radius:l.acc, color:'#0b5cad', weight:1, fillOpacity:.12}).addTo(map);
+    mGPS = L.circleMarker(ll, {radius:5, color:'#0b5cad', fillOpacity:1}).addTo(map).bindTooltip('Lectura del dispositivo');
+  } else { circulo.setLatLng(ll).setRadius(l.acc); mGPS.setLatLng(ll); }
+  map.fitBounds(circulo.getBounds(), {maxZoom:18});
+}
+function ponerVivienda(latlng, manual){
+  if (!mViv){
+    mViv = L.marker(latlng, {draggable:true}).addTo(map).bindTooltip('Vivienda (arrastre para ajustar)');
+    mViv.on('dragend', () => actualizarVivienda(mViv.getLatLng(), true));
+  } else mViv.setLatLng(latlng);
+  actualizarVivienda(L.latLng(latlng), manual);
+}
+map.on('click', e => { if (mViv || sinUbicacion) ponerVivienda(e.latlng, true); });
+
+/* ===================== CAPTURA ===================== */
+let lecturas = [], mejor = null, watchId = null, timer = null, tick = null;
+let t0 = 0, tPrimeraAbs = 0, tPrimera = null, tMejor = null;
+let puntoViv = null, sinUbicacion = false;
+
+const calidad = a => CALIDADES.find(c => a <= c.max);
+function fuenteEstimada(l){
+  if (l.acc <= 30 && l.alt != null) return 'GNSS (GPS)';
+  if (l.acc <= 150) return 'Wi-Fi / GNSS parcial';
+  if (l.acc <= 3000) return 'Celda, Wi-Fi o ubicación aproximada';
+  return 'IP / ubicación aproximada';
+}
+function dentroCR(lat, lon){ return lat >= CR.latMin && lat <= CR.latMax && lon >= CR.lonMin && lon <= CR.lonMax; }
+function haversine(a, b){
+  const R = 6371008.8, r = x => x * Math.PI / 180;
+  const dLat = r(b.lat - a.lat), dLon = r(b.lon - a.lon);
+  const h = Math.sin(dLat/2)**2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const fmt = (n, d=1) => (n == null || isNaN(n)) ? '—' : Number(n).toLocaleString('es-CR', {maximumFractionDigits:d});
+
+function estado(msg, cls){ const e = $('#estado'); e.className = 'status ' + cls; e.textContent = msg; }
+
+$('#consent').addEventListener('change', e => { $('#btnUbicar').disabled = !e.target.checked; });
+$('#btnUbicar').addEventListener('click', capturar);
+
+function capturar(){
+  if (!('geolocation' in navigator)) return fallo('Este navegador no soporta geolocalización.');
+  if (!window.isSecureContext) return fallo('La geolocalización solo funciona en páginas HTTPS.');
+  detener();
+  lecturas = []; mejor = null; tPrimera = null; tMejor = null;
+  $('#barra').style.width = '0';
+  $('#btnUbicar').disabled = true;
+  estado('Solicitando permiso de ubicación…', 'info');
+  t0 = performance.now();
+  watchId = navigator.geolocation.watchPosition(onPos, onErr,
+    {enableHighAccuracy:true, maximumAge:0, timeout:20000});
+}
+
+function onPos(p){
+  const c = p.coords, t = (performance.now() - t0) / 1000;
+  const l = {lat:c.latitude, lon:c.longitude, acc:c.accuracy, alt:c.altitude,
+             altAcc:c.altitudeAccuracy, vel:c.speed, t};
+  lecturas.push(l);
+  if (tPrimera == null){
+    tPrimera = t; tPrimeraAbs = performance.now();
+    timer = setTimeout(finalizar, CONFIG.TIEMPO_MAX_S * 1000);
+    tick = setInterval(() => {
+      const s = (performance.now() - tPrimeraAbs) / 1000;
+      $('#barra').style.width = Math.min(100, s / CONFIG.TIEMPO_MAX_S * 100) + '%';
+    }, 200);
+  }
+  if (!mejor || l.acc < mejor.acc){ mejor = l; tMejor = t; dibujarLectura(l); }
+  estado(`Midiendo… mejor precisión ±${fmt(mejor.acc)} m (objetivo ±${CONFIG.PRECISION_OBJETIVO_M} m)`, 'info');
+  pintarMetricas();
+  if (mejor.acc <= CONFIG.PRECISION_OBJETIVO_M) finalizar();
+}
+
+function onErr(e){
+  if (e.code === 1){
+    detener();
+    let ayuda = '';
+    if (disp.so === 'iOS/iPadOS') ayuda = 'iPhone/iPad: Ajustes › Privacidad y seguridad › Localización › Safari (o su navegador) › "Al usar la app" y active "Ubicación exacta".';
+    else if (disp.so === 'Android') ayuda = 'Android: toque el candado junto a la dirección › Permisos › Ubicación › Permitir. Verifique también que la ubicación del teléfono esté activa y en modo "precisa".';
+    else ayuda = 'Computadora: haga clic en el ícono de candado de la barra de direcciones › Ubicación › Permitir, y recargue la página.';
+    estado('Permiso de ubicación denegado.\n' + ayuda, 'error');
+    $('#btnUbicar').disabled = false;
+    mostrarAlternativa();
+  } else if (!lecturas.length && (e.code === 2 || e.code === 3)){
+    detener();
+    fallo(e.code === 3 ? 'No se obtuvo una ubicación a tiempo. Intente cerca de una ventana o al aire libre.'
+                       : 'La ubicación no está disponible en este dispositivo (¿servicios de ubicación desactivados?).');
+  }
+}
+
+function fallo(msg){ estado(msg, 'error'); $('#btnUbicar').disabled = !$('#consent').checked; mostrarAlternativa(); }
+function mostrarAlternativa(){
+  if (!CONFIG.OBLIGATORIO) $('#btnSinUbicacion').hidden = false;
+  else $('#lockMsg').textContent = '🔒 Este cuestionario requiere la ubicación del dispositivo. Habilítela para continuar.';
+}
+function detener(){
+  if (watchId != null) navigator.geolocation.clearWatch(watchId);
+  clearTimeout(timer); clearInterval(tick); watchId = null;
+}
+
+function finalizar(){
+  detener();
+  if (!mejor) return;
+  $('#barra').style.width = '100%';
+  const q = calidad(mejor.acc);
+  let msg = `Ubicación obtenida: ±${fmt(mejor.acc)} m (${q.nombre}).`, cls = mejor.acc <= 100 ? 'ok' : 'warn';
+  if (mejor.acc > 1000 && disp.tipo !== 'Escritorio/Portátil')
+    msg += '\nLa precisión es muy baja: probablemente está activada la "ubicación aproximada". Actívela como "exacta/precisa" y vuelva a medir.';
+  if (!dentroCR(mejor.lat, mejor.lon)){ msg += '\n⚠ El punto está fuera de Costa Rica.'; cls = 'warn'; }
+  msg += '\nConfirme o ajuste el punto de la vivienda en el mapa.';
+  estado(msg, cls);
+  $('#btnUbicar').disabled = false; $('#btnUbicar').textContent = 'Volver a medir';
+  pintarMetricas();
+  ponerVivienda([mejor.lat, mejor.lon], false);
+  $('#fsConfirma').disabled = false;
+  desbloquear();
+}
+
+function desbloquear(){ $('#fsForm').disabled = false; $('#lockMsg').hidden = true; }
+
+$('#btnSinUbicacion').addEventListener('click', () => {
+  sinUbicacion = true;
+  estado('Continuará sin la ubicación del dispositivo. Toque el mapa para marcar su vivienda.', 'warn');
+  $('#fsConfirma').disabled = true;
+  desbloquear();
+});
+
+function actualizarVivienda(ll, manual){
+  puntoViv = {lat:ll.lat, lon:ll.lng};
+  if (mejor){
+    const d = haversine(mejor, puntoViv);
+    $('#desplazamiento').textContent = `Distancia entre la lectura del dispositivo y la vivienda: ${fmt(d)} m`;
+    if (manual && d > 1) document.querySelector('input[name=confirma][value=ajustado]').checked = true;
+  } else {
+    $('#desplazamiento').textContent = 'Punto marcado manualmente (sin lectura del dispositivo).';
+  }
+}
+
+function pintarMetricas(){
+  if (!mejor){ $('#metricas').innerHTML = ''; return; }
+  const q = calidad(mejor.acc);
+  const m = [
+    ['±' + fmt(mejor.acc) + ' m', 'Mejor precisión'],
+    [`<span class="dot" style="background:${q.color}"></span>${q.nombre}`, 'Calidad'],
+    [fuenteEstimada(mejor), 'Fuente estimada'],
+    [lecturas.length, 'Lecturas'],
+    [fmt(tPrimera) + ' s', '1.ª lectura'],
+    [fmt(tMejor) + ' s', 'Mejor lectura'],
+    [mejor.alt == null ? 'no reporta' : fmt(mejor.alt) + ' m', 'Altitud']
+  ];
+  $('#metricas').innerHTML = m.map(([v, k]) => `<div class="metric"><b>${v}</b><span>${k}</span></div>`).join('');
+}
+
+/* ===================== ENVÍO ===================== */
+$('#formCenso').addEventListener('submit', e => {
+  e.preventDefault();
+  if (CONFIG.OBLIGATORIO && !mejor){ alert('Debe habilitar la ubicación antes de enviar.'); return; }
+  if (!puntoViv){ alert('Marque la vivienda en el mapa.'); return; }
+  const conf = document.querySelector('input[name=confirma]:checked');
+  if (mejor && !conf){ alert('Indique si el punto corresponde a la vivienda.'); return; }
+  const q = mejor ? calidad(mejor.acc) : null;
+  const r6 = n => n == null ? '' : Math.round(n * 1e6) / 1e6;
+  const r1 = n => n == null ? '' : Math.round(n * 10) / 10;
+  const reg = {
+    id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+    fecha: new Date().toISOString(),
+    obligatorio: CONFIG.OBLIGATORIO,
+    permiso: estadoPermiso,
+    con_ubicacion: !!mejor,
+    lat: mejor ? r6(mejor.lat) : '', lon: mejor ? r6(mejor.lon) : '',
+    precision_m: mejor ? r1(mejor.acc) : '',
+    altitud_m: mejor ? r1(mejor.alt) : '', precision_altitud_m: mejor ? r1(mejor.altAcc) : '',
+    calidad: q ? q.nombre : '', fuente_estimada: mejor ? fuenteEstimada(mejor) : '',
+    n_lecturas: lecturas.length, t_primera_s: r1(tPrimera), t_mejor_s: r1(tMejor),
+    lat_vivienda: r6(puntoViv.lat), lon_vivienda: r6(puntoViv.lon),
+    confirma_vivienda: conf ? conf.value : 'manual',
+    desplazamiento_m: mejor ? r1(haversine(mejor, puntoViv)) : '',
+    dentro_cr: mejor ? dentroCR(mejor.lat, mejor.lon) : dentroCR(puntoViv.lat, puntoViv.lon),
+    disp_tipo: disp.tipo, disp_so: disp.so, disp_navegador: disp.navegador,
+    disp_webview: disp.webview, disp_tactil: disp.tactil, disp_pantalla: disp.pantalla,
+    user_agent: disp.ua,
+    provincia: $('#provincia').value, tipo_vivienda: $('#tipoViv').value,
+    personas: Number($('#personas').value), lugar_llenado: $('#lugar').value,
+    observaciones: $('#obs').value.trim()
+  };
+  const arr = cargar(); arr.push(reg); guardar(arr);
+  let txt = mejor ? `Precisión ±${reg.precision_m} m (${reg.calidad}) · ${disp.tipo} · ${disp.so} · ${disp.navegador}.`
+                  : 'Registro sin ubicación del dispositivo (punto manual).';
+  if (CONFIG.ENDPOINT){
+    fetch(CONFIG.ENDPOINT, {method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(reg)})
+      .then(() => { $('#enviadoTxt').textContent = txt + ' Enviado a la hoja consolidada.'; })
+      .catch(() => { $('#enviadoTxt').textContent = txt + ' No se pudo enviar al servidor; quedó guardado localmente.'; });
+  }
+  $('#enviadoTxt').textContent = txt;
+  $('#formCenso').hidden = true; $('#enviado').hidden = false;
+  $('#enviado').scrollIntoView({behavior:'smooth'});
+});
+$('#btnOtro').addEventListener('click', () => location.reload());
+
+/* ===================== RESULTADOS ===================== */
+function cargar(){ try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch(e){ return []; } }
+function guardar(a){ try { localStorage.setItem(LS_KEY, JSON.stringify(a)); } catch(e){} }
+
+let mapRes = null, capaRes = null;
+function percentil(arr, p){
+  if (!arr.length) return null;
+  const s = [...arr].sort((a, b) => a - b), i = (s.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i);
+  return s[lo] + (s[hi] - s[lo]) * (i - lo);
+}
+function pintarResultados(){
+  const regs = cargar();
+  const grupos = {};
+  regs.forEach(r => { (grupos[r.disp_tipo] = grupos[r.disp_tipo] || []).push(r); });
+  grupos['Total'] = regs;
+  let h = '<tr><th>Dispositivo</th><th>n</th><th>Con ubicación</th><th>Mediana (m)</th><th>P90 (m)</th><th>≤30 m</th><th>Tiempo mejor (s, mediana)</th><th>Desplaz. mediana (m)</th></tr>';
+  for (const [g, rs] of Object.entries(grupos)){
+    const conU = rs.filter(r => r.con_ubicacion);
+    const acc = conU.map(r => Number(r.precision_m));
+    const tm = conU.map(r => Number(r.t_mejor_s));
+    const dsp = conU.map(r => Number(r.desplazamiento_m));
+    const pct30 = acc.length ? Math.round(acc.filter(a => a <= 30).length / acc.length * 100) + '%' : '—';
+    h += `<tr${g === 'Total' ? ' style="font-weight:600"' : ''}><td>${g}</td><td>${rs.length}</td><td>${conU.length}</td>
+          <td>${fmt(percentil(acc, .5))}</td><td>${fmt(percentil(acc, .9))}</td><td>${pct30}</td>
+          <td>${fmt(percentil(tm, .5))}</td><td>${fmt(percentil(dsp, .5))}</td></tr>`;
+  }
+  $('#resumen').innerHTML = regs.length ? h : '<tr><td>Aún no hay registros en este navegador.</td></tr>';
+
+  const cols = ['fecha','disp_tipo','disp_so','disp_navegador','precision_m','calidad','fuente_estimada','n_lecturas','t_mejor_s','confirma_vivienda','desplazamiento_m','dentro_cr','lugar_llenado'];
+  $('#tabla').innerHTML = '<tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr>' +
+    regs.slice().reverse().map(r => '<tr>' + cols.map(c =>
+      `<td>${c === 'fecha' ? new Date(r[c]).toLocaleString('es-CR') : (r[c] ?? '')}</td>`).join('') + '</tr>').join('');
+
+  if (!mapRes){
+    mapRes = L.map('mapRes').setView([9.93, -84.08], 8);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(mapRes);
+  }
+  setTimeout(() => mapRes.invalidateSize(), 50);
+  if (capaRes) capaRes.remove();
+  capaRes = L.featureGroup().addTo(mapRes);
+  regs.forEach(r => {
+    if (r.con_ubicacion){
+      const q = calidad(Number(r.precision_m));
+      L.circle([r.lat, r.lon], {radius:Number(r.precision_m), color:q.color, weight:1, fillOpacity:.08}).addTo(capaRes);
+      L.circleMarker([r.lat, r.lon], {radius:6, color:q.color, fillOpacity:.9})
+        .bindPopup(`${r.disp_tipo} · ${r.disp_so} · ${r.disp_navegador}<br>±${r.precision_m} m (${r.calidad})<br>${r.fuente_estimada}`)
+        .addTo(capaRes);
+      if (Number(r.desplazamiento_m) > 1)
+        L.polyline([[r.lat, r.lon], [r.lat_vivienda, r.lon_vivienda]], {color:q.color, dashArray:'4 4'}).addTo(capaRes);
+    }
+    L.circleMarker([r.lat_vivienda, r.lon_vivienda], {radius:3, color:'#333', fillOpacity:1}).addTo(capaRes);
+  });
+  if (regs.length) mapRes.fitBounds(capaRes.getBounds(), {maxZoom:17, padding:[20, 20]});
+  $('#leyenda').innerHTML = CALIDADES.map(c =>
+    `<span><span class="dot" style="background:${c.color}"></span>${c.nombre} (${c.max === Infinity ? '>1000' : '≤' + c.max} m)</span>`).join('') +
+    '<span><span class="dot" style="background:#333"></span>Vivienda confirmada</span>';
+}
+
+function descargar(nombre, contenido, tipo){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([contenido], {type:tipo}));
+  a.download = nombre; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$('#btnCSV').addEventListener('click', () => {
+  const regs = cargar(); if (!regs.length) return;
+  const cols = [...new Set(regs.flatMap(Object.keys))];
+  const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csv = '\ufeff' + cols.join(',') + '\n' + regs.map(r => cols.map(c => esc(r[c])).join(',')).join('\n');
+  descargar('registros_georref.csv', csv, 'text/csv');
+});
+$('#btnGeo').addEventListener('click', () => {
+  const regs = cargar(); if (!regs.length) return;
+  const fc = {type:'FeatureCollection', features: regs.map(r => ({
+    type:'Feature',
+    geometry:{type:'Point', coordinates: r.con_ubicacion ? [r.lon, r.lat] : [r.lon_vivienda, r.lat_vivienda]},
+    properties: Object.fromEntries(Object.entries(r).filter(([k]) => k !== 'user_agent'))
+  }))};
+  descargar('registros_georref.geojson', JSON.stringify(fc, null, 1), 'application/geo+json');
+});
+$('#btnBorrar').addEventListener('click', () => {
+  if (confirm('¿Borrar todos los registros guardados en este navegador?')){ guardar([]); pintarResultados(); }
+});
+
+/* ===================== PESTAÑAS ===================== */
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
+  $('#tab-encuesta').hidden = b.dataset.tab !== 'encuesta';
+  $('#tab-resultados').hidden = b.dataset.tab !== 'resultados';
+  if (b.dataset.tab === 'resultados') pintarResultados(); else setTimeout(() => map.invalidateSize(), 50);
+}));
+if (!CONFIG.OBLIGATORIO) $('#lockMsg').textContent = 'Habilite la ubicación o continúe sin ella para completar el cuestionario.';
+</script>
+</body>
+</html>
